@@ -14,8 +14,8 @@ jobs:
   release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -26,6 +26,13 @@ jobs:
         run: |
           v="$(node -p "require('./package.json').version")"
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} != package.json v$v"; exit 1; }
+      # Create the release up front: when electron-builder creates it itself,
+      # parallel uploads can race and split files across two releases.
+      - name: Create release
+        shell: bash
+        run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish
         run: npx electron-builder --win --x64 --publish always
         env:
