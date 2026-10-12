@@ -1,0 +1,32 @@
+name: Release
+
+# Push a tag like v1.0.1 to build the Windows installer and publish it as a
+# GitHub Release. Installed apps pick it up automatically (blockmap-based
+# differential download, so only the changed parts are fetched).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Check tag matches package.json version
+        shell: bash
+        run: |
+          v="$(node -p "require('./package.json').version")"
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} != package.json v$v"; exit 1; }
+      - name: Build and publish
+        run: npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

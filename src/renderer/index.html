@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https://i.ebayimg.com data:; style-src 'self'; script-src 'self'" />
+    <title>eBay Keyword Checker</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="titlebar">
+      <div class="brand">
+        <img src="../../build/icon.png" alt="" width="22" height="22" />
+        <span>eBay Keyword Checker</span>
+      </div>
+      <nav class="segmented" role="tablist">
+        <button role="tab" data-tab="searches" class="active">Searches</button>
+        <button role="tab" data-tab="matches">Matches</button>
+        <button role="tab" data-tab="settings">Settings</button>
+      </nav>
+      <div class="titlebar-spacer"></div>
+    </header>
+
+    <div id="update-banner" class="banner" hidden>
+      <span id="update-text"></span>
+      <button id="update-restart" class="btn small primary">Restart to Update</button>
+    </div>
+
+    <main>
+      <section id="tab-searches" class="tab active">
+        <div class="status-card">
+          <div class="status-main">
+            <span id="status-dot" class="dot"></span>
+            <div>
+              <div id="status-title" class="status-title">Starting…</div>
+              <div id="status-sub" class="muted small"></div>
+            </div>
+          </div>
+          <div class="status-actions">
+            <button id="pause-btn" class="btn">Pause</button>
+            <button id="check-btn" class="btn primary">Check Now</button>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h2>Searches</h2>
+          <button id="add-watch" class="btn primary">New Search</button>
+        </div>
+        <div id="webhook-hint" class="hint" hidden>
+          Add your Discord webhook in <a href="#" data-goto="settings">Settings</a> to get alerts.
+        </div>
+        <ul id="watch-list" class="list"></ul>
+        <div id="watch-empty" class="empty" hidden>
+          <div class="empty-title">No searches yet</div>
+          <div class="muted">Create one to start watching new eBay listings.</div>
+        </div>
+      </section>
+
+      <section id="tab-matches" class="tab">
+        <div class="section-head">
+          <h2>Matches</h2>
+          <button id="clear-matches" class="btn">Clear</button>
+        </div>
+        <ul id="match-list" class="list"></ul>
+        <div id="match-empty" class="empty" hidden>
+          <div class="empty-title">Nothing yet</div>
+          <div class="muted">New listings that match your searches show up here.</div>
+        </div>
+      </section>
+
+      <section id="tab-settings" class="tab">
+        <h2>Notifications</h2>
+        <div class="group">
+          <label class="row stacked">
+            <span>Discord Webhook URL</span>
+            <div class="inline">
+              <input id="set-webhook" type="url" placeholder="https://discord.com/api/webhooks/…" spellcheck="false" />
+              <button id="test-webhook" class="btn">Test</button>
+            </div>
+          </label>
+          <label class="row stacked">
+            <span>Mention <span class="muted">(optional, e.g. @everyone or &lt;@&amp;roleId&gt;)</span></span>
+            <input id="set-mention" type="text" placeholder="None" spellcheck="false" />
+          </label>
+          <label class="row">
+            <span>Windows notifications</span>
+            <input id="set-desktop" type="checkbox" class="switch" />
+          </label>
+          <label class="row">
+            <span>Alert on a search’s first check</span>
+            <input id="set-firstcheck" type="checkbox" class="switch" />
+          </label>
+        </div>
+
+        <h2>Checking</h2>
+        <div class="group">
+          <div class="row">
+            <span>Check every</span>
+            <div class="inline">
+              <input id="set-min" type="number" min="12" max="120" class="num" />
+              <span class="muted">to</span>
+              <input id="set-max" type="number" min="12" max="120" class="num" />
+              <span class="muted">minutes</span>
+            </div>
+          </div>
+          <div class="row note muted small" id="rate-note"></div>
+        </div>
+
+        <h2>App</h2>
+        <div class="group">
+          <div class="row">
+            <span>Appearance</span>
+            <div class="segmented small" id="theme-seg">
+              <button data-theme="system">System</button>
+              <button data-theme="light">Light</button>
+              <button data-theme="dark">Dark</button>
+            </div>
+          </div>
+          <label class="row">
+            <span>Start with Windows</span>
+            <input id="set-startup" type="checkbox" class="switch" />
+          </label>
+          <label class="row">
+            <span>Keep running in tray when closed</span>
+            <input id="set-tray" type="checkbox" class="switch" />
+          </label>
+          <div class="row">
+            <span>Version <span id="version" class="muted"></span> <span id="update-status" class="muted small"></span></span>
+            <button id="check-updates" class="btn">Check for Updates</button>
+          </div>
+        </div>
+
+        <h2>Activity</h2>
+        <ul id="log-list" class="group log"></ul>
+      </section>
+    </main>
+
+    <div id="sheet-backdrop" class="backdrop" hidden>
+      <form id="sheet" class="sheet" autocomplete="off">
+        <h3 id="sheet-title">New Search</h3>
+        <label class="field">
+          <span>Name</span>
+          <input name="name" type="text" placeholder="e.g. RTX 4090 Founders" maxlength="80" />
+        </label>
+        <label class="field">
+          <span>Keywords</span>
+          <input name="query" type="text" placeholder='rtx 4090 +founders -broken -"for parts"' required spellcheck="false" />
+        </label>
+        <div class="chips" id="query-preview"></div>
+        <p class="help muted small">
+          <b>+word</b> must be in the title · <b>-word</b> hides listings with it · <b>"two words"</b> phrase ·
+          <b>+(a,b)</b> any of · <b>word*</b> prefix
+        </p>
+        <div class="field-row">
+          <label class="field">
+            <span>Min price</span>
+            <input name="minPrice" type="number" min="0" step="0.01" placeholder="Any" />
+          </label>
+          <label class="field">
+            <span>Max price</span>
+            <input name="maxPrice" type="number" min="0" step="0.01" placeholder="Any" />
+          </label>
+        </div>
+        <label class="check">
+          <input name="includeShipping" type="checkbox" /> Include shipping in price
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Format</span>
+            <select name="listingType">
+              <option value="all">All</option>
+              <option value="buy_it_now">Buy It Now</option>
+              <option value="auction">Auction</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Condition</span>
+            <select name="condition">
+              <option value="any">Any</option>
+              <option value="new">New</option>
+              <option value="used">Used</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Webhook for this search <span class="muted">(optional)</span></span>
+          <input name="webhookUrl" type="url" placeholder="Uses the default webhook" spellcheck="false" />
+        </label>
+        <div id="sheet-error" class="error small" hidden></div>
+        <div class="sheet-actions">
+          <button type="button" id="sheet-delete" class="btn danger-text">Delete</button>
+          <div class="spacer"></div>
+          <button type="button" id="sheet-cancel" class="btn">Cancel</button>
+          <button type="submit" class="btn primary">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="../main/query.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

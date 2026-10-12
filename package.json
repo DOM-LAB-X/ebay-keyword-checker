@@ -1,0 +1,79 @@
+{
+  "name": "ebay-keyword-checker",
+  "productName": "eBay Keyword Checker",
+  "version": "1.0.0",
+  "description": "Watches new eBay listings for your keywords and sends matches to Discord.",
+  "main": "src/main/main.js",
+  "author": "Dom Labs",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DOM-LAB-X/ebay-keyword-checker.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "vitest run",
+    "icons": "node scripts/make-icons.js",
+    "smoke": "node scripts/smoke.js",
+    "dist": "electron-builder --win --x64",
+    "release": "electron-builder --win --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "linkedom": "^0.18.13"
+  },
+  "devDependencies": {
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5",
+    "vitest": "^5.0.4"
+  },
+  "build": {
+    "appId": "com.domlabs.ebaykeywordchecker",
+    "productName": "eBay Keyword Checker",
+    "artifactName": "eBay-Keyword-Checker-Setup-${version}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/icon.ico",
+      "build/tray.png",
+      "package.json"
+    ],
+    "asar": true,
+    "electronLanguages": [
+      "en-US"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "eBay Keyword Checker",
+      "differentialPackage": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "DOM-LAB-X",
+        "repo": "ebay-keyword-checker",
+        "releaseType": "release"
+      }
+    ]
+  }
+}
