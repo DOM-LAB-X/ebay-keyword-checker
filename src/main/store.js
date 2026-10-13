@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { clampInterval } = require('./scheduler');
 
 const SEEN_LIMIT = 3000;
+const NOTIFIED_LIMIT = 5000;
 const MATCH_LIMIT = 200;
 const LOG_LIMIT = 200;
 
@@ -30,6 +31,7 @@ function defaultState() {
     settings: { ...DEFAULT_SETTINGS },
     watches: [],
     seen: {}, // watchId -> [listingId, ...] newest last
+    notified: [], // listing ids already alerted by any search, newest last
     matches: [], // recent matches for the UI, newest first
     log: [],
     lastCycleAt: null,
@@ -108,6 +110,7 @@ class Store {
           settings: sanitizeSettings(raw.settings || {}, DEFAULT_SETTINGS),
           watches: Array.isArray(raw.watches) ? raw.watches : [],
           seen: raw.seen && typeof raw.seen === 'object' ? raw.seen : {},
+          notified: Array.isArray(raw.notified) ? raw.notified : [],
           matches: Array.isArray(raw.matches) ? raw.matches : [],
           log: Array.isArray(raw.log) ? raw.log : [],
         };
@@ -202,6 +205,25 @@ class Store {
     this.save();
   }
 
+  /** True if any search has already sent an alert for this listing. */
+  wasNotified(listingId) {
+    return this.state.notified.includes(listingId);
+  }
+
+  /** Records alerted listings and writes to disk immediately, so a crash can't cause a resend. */
+  markNotified(ids) {
+    const set = new Set(this.state.notified);
+    for (const id of ids) {
+      if (!set.has(id)) {
+        set.add(id);
+        this.state.notified.push(id);
+      }
+    }
+    const list = this.state.notified;
+    if (list.length > NOTIFIED_LIMIT) list.splice(0, list.length - NOTIFIED_LIMIT);
+    this.saveNow();
+  }
+
   addMatches(matches) {
     this.state.matches = [...matches, ...this.state.matches].slice(0, MATCH_LIMIT);
     this.save();
@@ -226,6 +248,7 @@ module.exports = {
   sanitizeSettings,
   priceOrNull,
   SEEN_LIMIT,
+  NOTIFIED_LIMIT,
   MATCH_LIMIT,
   LOG_LIMIT,
 };

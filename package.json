@@ -1,7 +1,7 @@
 {
   "name": "ebay-keyword-checker",
   "productName": "eBay Keyword Checker",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Watches new eBay listings for your keywords and sends matches to Discord.",
   "main": "src/main/main.js",
   "author": "Dom Labs",

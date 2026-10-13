@@ -135,3 +135,22 @@ describe('Store', () => {
     expect(s.state.matches.length).toBe(MATCH_LIMIT);
   });
 });
+
+describe('notified history', () => {
+  it('remembers alerted listings across restarts and caps the list', async () => {
+    const { Store, NOTIFIED_LIMIT } = await import('../src/main/store.js');
+    const fs = await import('fs');
+    const os = await import('os');
+    const path = await import('path');
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ekc-n-'));
+    const file = path.join(d, 'data.json');
+    const s = new Store(file);
+    s.markNotified(['a', 'b', 'a']);
+    expect(s.state.notified).toEqual(['a', 'b']);
+    expect(new Store(file).wasNotified('b')).toBe(true);
+    s.markNotified(Array.from({ length: NOTIFIED_LIMIT + 10 }, (_, i) => `x${i}`));
+    expect(s.state.notified.length).toBe(NOTIFIED_LIMIT);
+    s.dispose();
+    fs.rmSync(d, { recursive: true, force: true });
+  });
+});

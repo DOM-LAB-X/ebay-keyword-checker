@@ -201,3 +201,78 @@ describe('runCycle', () => {
     expect(store.state.watches.find((x) => x.id === w.id).lastStatus).toBe('ok');
   });
 });
+
+describe('never sends the same listing twice', () => {
+  const deps = (over = {}) => ({
+    store,
+    fetchListings: async () => page(),
+    sendDiscord: vi.fn().mockResolvedValue({ sent: 1, failed: 0 }),
+    notifyDesktop: vi.fn(),
+    sleep: vi.fn().mockResolvedValue(),
+    rng: () => 0.5,
+    ...over,
+  });
+  const sentIds = (d) => d.sendDiscord.mock.calls.flatMap(([, payloads]) => payloads.flatMap((p) => p.embeds.map((e) => e.url)));
+
+  it('does not resend a listing on later cycles', async () => {
+    store.updateSettings({ webhookUrl: HOOK });
+    const w = store.upsertWatch({ query: 'rtx' });
+    store.markSeen(w.id, []);
+    const d = deps({ fetchListings: async () => page(raw('1', 'RTX')) });
+    await runCycle(d);
+    await runCycle(d);
+    await runCycle(d);
+    expect(d.sendDiscord).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a listing once even if eBay repeats it on the same page', async () => {
+    store.updateSettings({ webhookUrl: HOOK });
+    const w = store.upsertWatch({ query: 'rtx' });
+    store.markSeen(w.id, []);
+    const d = deps({ fetchListings: async () => page(raw('1', 'RTX'), raw('1', 'RTX'), raw('2', 'RTX b')) });
+    await runCycle(d);
+    expect(sentIds(d)).toHaveLength(2);
+    expect(new Set(sentIds(d)).size).toBe(2);
+  });
+
+  it('sends a listing once even when two searches match it', async () => {
+    store.updateSettings({ webhookUrl: HOOK });
+    const a = store.upsertWatch({ query: 'rtx' });
+    const b = store.upsertWatch({ query: 'rtx 4090' });
+    store.markSeen(a.id, []);
+    store.markSeen(b.id, []);
+    const d = deps({ fetchListings: async () => page(raw('1', 'RTX 4090')) });
+    await runCycle(d);
+    expect(d.sendDiscord).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not resend after a search’s keywords are edited', async () => {
+    store.updateSettings({ webhookUrl: HOOK, notifyFirstCheck: true });
+    const w = store.upsertWatch({ query: 'rtx' });
+    store.markSeen(w.id, []);
+    const d = deps({ fetchListings: async () => page(raw('1', 'RTX 4090')) });
+    await runCycle(d);
+    store.upsertWatch({ ...w, query: 'rtx 4090' }); // clears this search's seen history
+    await runCycle(d);
+    expect(d.sendDiscord).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves alerted listings to disk before sending, so a crash cannot cause a resend', async () => {
+    store.updateSettings({ webhookUrl: HOOK });
+    const w = store.upsertWatch({ query: 'rtx' });
+    store.markSeen(w.id, []);
+    let onDisk = null;
+    const sendDiscord = vi.fn(async () => {
+      onDisk = JSON.parse(fs.readFileSync(store.filePath, 'utf8'));
+      return { sent: 1, failed: 0 };
+    });
+    await runCycle(deps({ fetchListings: async () => page(raw('1', 'RTX')), sendDiscord }));
+    expect(onDisk.notified).toContain('1');
+
+    const restarted = new Store(store.filePath); // simulate the app relaunching
+    const d2 = deps({ store: restarted, fetchListings: async () => page(raw('1', 'RTX')) });
+    await runCycle(d2);
+    restarted.dispose();
+    expect(d2.sendDiscord).not.toHaveBeenCalled();
+  });
+});

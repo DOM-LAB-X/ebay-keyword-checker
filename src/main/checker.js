@@ -40,16 +40,17 @@ async function checkWatch(watch, { store, fetchListings, now = Date.now }) {
 
   const parsed = parseQuery(watch.query);
   const firstRun = !store.hasSeenAny(watch.id);
-  const allIds = [];
+  const allIds = new Set();
   const found = [];
   for (const raw of page.listings) {
-    allIds.push(raw.id);
-    if (store.isSeen(watch.id, raw.id)) continue;
+    if (allIds.has(raw.id)) continue; // eBay can repeat a listing on one page
+    allIds.add(raw.id);
+    if (store.isSeen(watch.id, raw.id) || store.wasNotified(raw.id)) continue;
     const listing = enrichListing(raw);
     if (!filterListing(watch, listing, parsed).ok) continue;
     found.push({ ...listing, watchId: watch.id, watchName: watch.name, foundAt: now() });
   }
-  store.markSeen(watch.id, allIds);
+  store.markSeen(watch.id, [...allIds]);
   return { status: 'ok', found, scanned: page.listings.length, seeded: firstRun };
 }
 
@@ -105,6 +106,8 @@ async function runCycle({ store, fetchListings, sendDiscord, notifyDesktop, slee
     }
     if (!result.found.length) continue;
 
+    // record before sending: a listing is never alerted twice, even across searches or after a crash
+    store.markNotified(result.found.map((l) => l.id));
     store.addLog('info', `“${watch.name}”: ${result.found.length} new match${result.found.length === 1 ? '' : 'es'}.`);
     const webhook = isValidWebhook(watch.webhookUrl) ? watch.webhookUrl : settings.webhookUrl;
     if (isValidWebhook(webhook)) {
