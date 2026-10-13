@@ -51,7 +51,7 @@ Example: `rtx 4090 +(fe,founders) -broken -"for parts"` with max price `1600`.
 ```bash
 npm install
 npm start          # run the app
-npm test           # 131 unit tests (vitest)
+npm test           # 137 unit tests (vitest)
 npm run smoke -- out/   # screenshots of every screen, light + dark
 npx electron scripts/live-check.js   # one real check against eBay (no Discord)
 npm run icons      # regenerate icon.png / icon.ico / tray.png from build/icon.svg

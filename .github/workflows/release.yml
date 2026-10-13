@@ -26,14 +26,25 @@ jobs:
         run: |
           v="$(node -p "require('./package.json').version")"
           [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} != package.json v$v"; exit 1; }
-      # Create the release up front: when electron-builder creates it itself,
-      # parallel uploads can race and split files across two releases.
-      - name: Create release
+      # Create the release up front as a draft: when electron-builder creates it
+      # itself, parallel uploads can race and split files across two releases.
+      # Drafts are invisible to installed apps until every file is uploaded.
+      - name: Create draft release
         shell: bash
-        run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and publish
         run: npx electron-builder --win --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish release
+        shell: bash
+        run: |
+          names="$(gh release view "$GITHUB_REF_NAME" --json assets -q '.assets[].name')"
+          for f in latest.yml .exe .exe.blockmap; do
+            echo "$names" | grep -q -- "$f$" || { echo "Missing $f"; exit 1; }
+          done
+          gh release edit "$GITHUB_REF_NAME" --draft=false --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
