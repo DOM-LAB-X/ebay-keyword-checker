@@ -3,6 +3,7 @@
 const MIN_INTERVAL_MINUTES = 12; // never more than 5 cycles per hour
 const MAX_INTERVAL_MINUTES = 120;
 const MANUAL_COOLDOWN_MS = 5 * 60 * 1000;
+const WATCH_COOLDOWN_MS = 2 * 60 * 1000; // per search, for its own Check button
 const MAX_BACKOFF_MS = 2 * 60 * 60 * 1000;
 
 function clampInterval(minMinutes, maxMinutes) {
@@ -44,6 +45,13 @@ function canRunManual(lastCycleAt, now = Date.now()) {
   return waitMs <= 0 ? { ok: true, waitMs: 0 } : { ok: false, waitMs };
 }
 
+/** A single search can be checked by hand at most once every 2 minutes. */
+function canCheckWatch(lastCheckedAt, now = Date.now()) {
+  if (!lastCheckedAt) return { ok: true, waitMs: 0 };
+  const waitMs = lastCheckedAt + WATCH_COOLDOWN_MS - now;
+  return waitMs <= 0 ? { ok: true, waitMs: 0 } : { ok: false, waitMs };
+}
+
 /** Rough requests per hour, for the UI. */
 function estimateRequestsPerHour(settings, searchCount) {
   const { min, max } = clampInterval(settings.intervalMinMinutes, settings.intervalMaxMinutes);
@@ -82,7 +90,7 @@ class Scheduler {
   }
 
   async tick() {
-    if (this.running) return;
+    if (this.running) return this.scheduleNext(30000); // a single-search check is busy; try again shortly
     this.running = true;
     this.timer = null;
     this.nextAt = null;
@@ -94,6 +102,25 @@ class Scheduler {
     } finally {
       this.running = false;
       this.scheduleNext();
+    }
+  }
+
+  /**
+   * Runs one-off work (e.g. checking a single search) without overlapping a cycle.
+   * The regular timer keeps its place; a block still counts toward backoff.
+   */
+  async runExclusive(fn) {
+    if (this.running) return { busy: true };
+    this.running = true;
+    try {
+      const outcome = await fn();
+      if (outcome && outcome.blocked) {
+        this.failureStreak += 1;
+        this.scheduleNext();
+      }
+      return outcome;
+    } finally {
+      this.running = false;
     }
   }
 
@@ -112,11 +139,13 @@ module.exports = {
   MIN_INTERVAL_MINUTES,
   MAX_INTERVAL_MINUTES,
   MANUAL_COOLDOWN_MS,
+  WATCH_COOLDOWN_MS,
   MAX_BACKOFF_MS,
   clampInterval,
   nextDelayMs,
   betweenSearchDelayMs,
   canRunManual,
+  canCheckWatch,
   estimateRequestsPerHour,
   Scheduler,
 };

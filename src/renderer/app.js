@@ -127,12 +127,22 @@
         toggle.checked = w.enabled;
         toggle.addEventListener('click', (e) => e.stopPropagation());
         toggle.addEventListener('change', () => api.toggleWatch(w.id, toggle.checked));
-        const statusText = w.lastStatus === 'blocked' ? 'Slowed by eBay' : w.lastStatus === 'error' ? 'Last check failed' : `Checked ${ago(w.lastCheckedAt)}`;
+        const busy = state.status.running;
+        const checkingThis = busy && state.status.progress && state.status.progress.watchId === w.id;
+        const statusText = checkingThis
+          ? 'Checking…'
+          : w.lastStatus === 'blocked' ? 'Slowed by eBay' : w.lastStatus === 'error' ? 'Last check failed' : `Checked ${ago(w.lastCheckedAt)}`;
+        const stop = (fn) => (e) => {
+          e.stopPropagation();
+          fn();
+        };
+        const checkBtn = el('button', { class: 'btn small', text: 'Check', title: 'Check this search now', disabled: busy, onclick: stop(() => checkWatch(w.id)) });
+        const editBtn = el('button', { class: 'btn small', text: 'Edit', title: 'Edit this search', onclick: stop(() => openSheet(w)) });
         return el(
           'li',
           { class: `watch clickable${w.enabled ? '' : ' disabled'}`, onclick: () => openSheet(w) },
           el('div', { class: 'item-main' }, el('div', { class: 'item-title', text: w.name }), el('div', { class: 'chips' }, queryChips(w.parts, w))),
-          el('div', { class: 'item-side' }, el('span', { class: 'muted small', text: statusText }), toggle)
+          el('div', { class: 'item-side' }, el('span', { class: 'muted small', text: statusText }), checkBtn, editBtn, toggle)
         );
       })
     );
@@ -288,6 +298,10 @@
     const r = await api.checkNow();
     if (!r.ok) toast(r.message);
   });
+  async function checkWatch(id) {
+    const r = await api.checkWatch(id);
+    if (r && r.message) toast(r.message);
+  }
   $('#pause-btn').addEventListener('click', () => api.togglePause());
   $('#clear-matches').addEventListener('click', () => api.clearMatches());
   $('#update-restart').addEventListener('click', () => api.installUpdate());

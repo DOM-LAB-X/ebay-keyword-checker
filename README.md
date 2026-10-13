@@ -35,7 +35,7 @@ Example: `rtx 4090 +(fe,founders) -broken -"for parts"` with max price `1600`.
 - Each cycle waits a **random 12–15 minutes** (at most 4–5 per hour). The minimum allowed is 12 minutes.
 - Searches within a cycle are spaced **8–25 seconds apart**, at random.
 - If eBay pushes back (HTTP 429 or a bot challenge), the app **backs off exponentially** for up to 2 hours.
-- "Check Now" has a 5-minute cooldown.
+- "Check Now" has a 5-minute cooldown. Each search also has its own **Check** button (once per 2 minutes per search).
 - Requests go through Chromium's own network stack with a persistent cookie jar, so they look like a normal Chrome visit. If eBay shows a challenge, the app solves it once in a hidden window with images and fonts blocked, then returns to the light path.
 - The first check of a new search **silently** marks existing listings as seen, so you only get alerts for genuinely new ones. You can change this in Settings.
 
@@ -51,7 +51,7 @@ Example: `rtx 4090 +(fe,founders) -broken -"for parts"` with max price `1600`.
 ```bash
 npm install
 npm start          # run the app
-npm test           # 137 unit tests (vitest)
+npm test           # 146 unit tests (vitest)
 npm run smoke -- out/   # screenshots of every screen, light + dark
 npx electron scripts/live-check.js   # one real check against eBay (no Discord)
 npm run icons      # regenerate icon.png / icon.ico / tray.png from build/icon.svg

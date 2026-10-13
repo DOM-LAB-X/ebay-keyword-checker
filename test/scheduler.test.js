@@ -115,3 +115,58 @@ describe('Scheduler', () => {
     expect(s.nextAt).not.toBeNull();
   });
 });
+
+import { canCheckWatch, WATCH_COOLDOWN_MS } from '../src/main/scheduler.js';
+
+describe('checking a single search', () => {
+  const settings = { intervalMinMinutes: 12, intervalMaxMinutes: 15 };
+  const quiet = (run) => new Scheduler({ run, getSettings: () => settings, setTimer: () => 1, clearTimer: () => {} });
+
+  it('allows a search never checked, and limits each search to one manual check per 2 minutes', () => {
+    expect(canCheckWatch(null).ok).toBe(true);
+    expect(canCheckWatch(1000, 1000 + 30000)).toEqual({ ok: false, waitMs: WATCH_COOLDOWN_MS - 30000 });
+    expect(canCheckWatch(1000, 1000 + WATCH_COOLDOWN_MS).ok).toBe(true);
+  });
+
+  it('runs one-off work exclusively and leaves the timer alone on success', async () => {
+    const s = quiet(async () => ({}));
+    s.scheduleNext(5000);
+    const before = s.nextAt;
+    let during = null;
+    await s.runExclusive(async () => {
+      during = s.running;
+      return { failed: false };
+    });
+    expect(during).toBe(true);
+    expect(s.running).toBe(false);
+    expect(s.nextAt).toBe(before);
+  });
+
+  it('refuses one-off work while a cycle runs', async () => {
+    let release;
+    const s = quiet(() => new Promise((r) => (release = r)));
+    const t = s.tick();
+    expect(await s.runExclusive(async () => ({}))).toEqual({ busy: true });
+    release({ failed: false });
+    await t;
+  });
+
+  it('a block during a single-search check still counts toward backoff', async () => {
+    const s = quiet(async () => ({}));
+    await s.runExclusive(async () => ({ blocked: true }));
+    expect(s.failureStreak).toBe(1);
+  });
+
+  it('postpones the timed cycle briefly instead of skipping it when a single check is busy', async () => {
+    const run = vi.fn().mockResolvedValue({});
+    const delays = [];
+    const s = new Scheduler({ run, getSettings: () => settings, setTimer: (_f, ms) => (delays.push(ms), 1), clearTimer: () => {} });
+    let release;
+    const one = s.runExclusive(() => new Promise((r) => (release = r)));
+    await s.tick();
+    expect(run).not.toHaveBeenCalled();
+    expect(delays.at(-1)).toBe(30000);
+    release({});
+    await one;
+  });
+});

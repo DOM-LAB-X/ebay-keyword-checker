@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   toggleWatch: (id, enabled) => ipcRenderer.invoke('watch:toggle', id, enabled),
   saveSettings: (patch) => ipcRenderer.invoke('settings:save', patch),
   checkNow: () => ipcRenderer.invoke('check:now'),
+  checkWatch: (id) => ipcRenderer.invoke('check:watch', id),
   togglePause: () => ipcRenderer.invoke('check:pause'),
   testWebhook: (url) => ipcRenderer.invoke('webhook:test', url),
   clearMatches: () => ipcRenderer.invoke('matches:clear'),

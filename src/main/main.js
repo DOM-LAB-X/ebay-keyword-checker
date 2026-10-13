@@ -5,7 +5,7 @@ const fs = require('fs');
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeTheme, shell, dialog, session, Notification, nativeImage } = require('electron');
 
 const { Store } = require('./store');
-const { Scheduler, canRunManual, estimateRequestsPerHour } = require('./scheduler');
+const { Scheduler, canRunManual, canCheckWatch, estimateRequestsPerHour } = require('./scheduler');
 const { runCycle } = require('./checker');
 const { EbayFetcher } = require('./ebay');
 const { extractListings } = require('./parser');
@@ -205,10 +205,11 @@ function notifyDesktop(watch, found) {
   n.show();
 }
 
-async function cycle() {
+async function cycle(onlyWatchId = null) {
   pushState();
   try {
     const outcome = await runCycle({
+      onlyWatchId,
       store,
       fetchListings: (url) => fetcher.fetchListings(url),
       sendDiscord: (url, payloads) => sendPayloads(url, payloads),
@@ -237,6 +238,27 @@ async function manualCheck() {
   scheduler.cancel();
   scheduler.tick();
   return { ok: true };
+}
+
+async function checkOneWatch(id) {
+  const watch = store.state.watches.find((w) => w.id === id);
+  if (!watch) return { ok: false, message: 'That search no longer exists.' };
+  if (scheduler.running) return { ok: false, message: 'A check is already running.' };
+  const gate = canCheckWatch(watch.lastCheckedAt);
+  if (!gate.ok) {
+    const secs = Math.ceil(gate.waitMs / 1000);
+    const wait = secs >= 60 ? `${Math.ceil(secs / 60)} min` : `${secs} sec`;
+    return { ok: false, message: `“${watch.name}” was just checked. To protect your eBay access, try again in ${wait}.` };
+  }
+  const outcome = await scheduler.runExclusive(() => cycle(id));
+  if (outcome && outcome.busy) return { ok: false, message: 'A check is already running.' };
+  const r = outcome && outcome.results && outcome.results[0];
+  if (!r) return { ok: false, message: 'Check failed.' };
+  if (r.status === 'blocked') return { ok: false, message: 'eBay asked to slow down. Backing off for a while.' };
+  if (r.status === 'error') return { ok: false, message: `Check failed: ${r.error}` };
+  if (r.seeded && !store.settings.notifyFirstCheck) return { ok: true, message: `“${watch.name}” is set up. ${r.scanned} current listings marked as seen.` };
+  const n = r.found.length;
+  return { ok: true, message: n ? `“${watch.name}”: ${n} new match${n === 1 ? '' : 'es'}` : `“${watch.name}”: no new listings` };
 }
 
 function togglePause() {
@@ -290,6 +312,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('check:now', () => manualCheck());
+  ipcMain.handle('check:watch', (_e, id) => checkOneWatch(id));
   ipcMain.handle('check:pause', () => {
     togglePause();
     return { ok: true };
@@ -356,7 +379,7 @@ async function smokeScreenshot(outPath) {
 app.whenReady().then(() => {
   store = new Store(path.join(app.getPath('userData'), 'data.json'));
   fetcher = new EbayFetcher({ BrowserWindow, session, extractSource: extractListings.toString(), extract: extractListings, parseHTML });
-  scheduler = new Scheduler({ run: cycle, getSettings: () => store.settings });
+  scheduler = new Scheduler({ run: () => cycle(), getSettings: () => store.settings });
 
   nativeTheme.themeSource = store.settings.theme;
   nativeTheme.on('updated', () => {

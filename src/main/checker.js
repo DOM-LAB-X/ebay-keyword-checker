@@ -58,15 +58,16 @@ async function checkWatch(watch, { store, fetchListings, now = Date.now }) {
  * Runs every enabled watch once with randomized pauses in between.
  * Returns { failed, totalFound, results }
  */
-async function runCycle({ store, fetchListings, sendDiscord, notifyDesktop, sleep, rng = Math.random, now = Date.now, onProgress = () => {} }) {
-  const watches = store.state.watches.filter((w) => w.enabled);
+async function runCycle({ store, fetchListings, sendDiscord, notifyDesktop, sleep, rng = Math.random, now = Date.now, onProgress = () => {}, onlyWatchId = null }) {
+  // onlyWatchId: check just that one search (its own Check button), even if it is switched off
+  const watches = onlyWatchId ? store.state.watches.filter((w) => w.id === onlyWatchId) : store.state.watches.filter((w) => w.enabled);
   const settings = store.settings;
   const results = [];
   let blocked = 0;
   let errors = 0;
   let totalFound = 0;
 
-  store.state.lastCycleAt = now();
+  if (!onlyWatchId) store.state.lastCycleAt = now();
 
   for (let i = 0; i < watches.length; i++) {
     const watch = watches[i];

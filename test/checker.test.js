@@ -276,3 +276,50 @@ describe('never sends the same listing twice', () => {
     expect(d2.sendDiscord).not.toHaveBeenCalled();
   });
 });
+
+describe('checking one search on its own', () => {
+  const deps = (over = {}) => ({
+    store,
+    fetchListings: vi.fn(async () => page(raw('1', 'RTX'))),
+    sendDiscord: vi.fn().mockResolvedValue({ sent: 1, failed: 0 }),
+    notifyDesktop: vi.fn(),
+    sleep: vi.fn().mockResolvedValue(),
+    rng: () => 0.5,
+    ...over,
+  });
+
+  it('only fetches the chosen search', async () => {
+    const a = store.upsertWatch({ query: 'ram' });
+    store.upsertWatch({ query: 'hp' });
+    const d = deps();
+    const out = await runCycle({ ...d, onlyWatchId: a.id });
+    expect(d.fetchListings).toHaveBeenCalledTimes(1);
+    expect(d.fetchListings.mock.calls[0][0]).toContain('_nkw=ram');
+    expect(out.results.map((r) => r.watchId)).toEqual([a.id]);
+    expect(d.sleep).not.toHaveBeenCalled();
+  });
+
+  it('does not reset the full-cycle cooldown', async () => {
+    const a = store.upsertWatch({ query: 'ram' });
+    await runCycle({ ...deps(), onlyWatchId: a.id, now: () => 99 });
+    expect(store.state.lastCycleAt).toBeNull();
+    expect(store.state.watches[0].lastCheckedAt).toBe(99);
+  });
+
+  it('works on a search that is switched off', async () => {
+    const a = store.upsertWatch({ query: 'ram', enabled: false });
+    const d = deps();
+    await runCycle({ ...d, onlyWatchId: a.id });
+    expect(d.fetchListings).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends new matches to Discord just like a normal check', async () => {
+    store.updateSettings({ webhookUrl: HOOK });
+    const a = store.upsertWatch({ query: 'rtx' });
+    store.markSeen(a.id, []);
+    const d = deps();
+    const out = await runCycle({ ...d, onlyWatchId: a.id });
+    expect(out.totalFound).toBe(1);
+    expect(d.sendDiscord).toHaveBeenCalledTimes(1);
+  });
+});
